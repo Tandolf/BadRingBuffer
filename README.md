@@ -6,4 +6,5 @@ Dont use it... Im serious... Just don't.
 This is an `unsafe` ring buffer implemented in Rust with memory layout and pointers. When the buffer is full it will push the tail hence overwriting the oldest generation.
 
 ### TODO
+- Drop memory after allocation (dont use this, its leaking memory atm.)
 - Impl option to not overwrite oldest gen and instead return an error during write time.

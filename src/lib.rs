@@ -1,7 +1,7 @@
-use std::io::{Read, Write, Result};
-use std::alloc::{alloc, Layout};
-use std::mem::{size_of, align_of};
-use::std::ptr;
+use ::std::ptr;
+use std::alloc::{alloc, dealloc, Layout};
+use std::io::{Read, Result, Write};
+use std::mem::{align_of, size_of};
 
 // -----------------------------------------------------------------------------
 //    - BadRingBuffer struct -
@@ -17,14 +17,12 @@ pub struct BadRingBuffer<T> {
 impl<T> BadRingBuffer<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         // Define memory layout
-        let layout = Layout::from_size_align(
-            capacity * size_of::<T>(),
-            align_of::<T>())
+        let layout = Layout::from_size_align(capacity * size_of::<T>(), align_of::<T>())
             .expect("could not create memory layout");
 
         //Allocate memory according to defined layout
         let mem = unsafe { alloc(layout) };
-        
+
         // Cast ptr to the current T size because alloc always returns a u8
         let start_ptr = mem.cast::<T>();
 
@@ -33,7 +31,7 @@ impl<T> BadRingBuffer<T> {
             tail: 0,
             start_ptr,
             capacity,
-            count: 0
+            count: 0,
         }
     }
 
@@ -71,15 +69,15 @@ impl<T> BadRingBuffer<T> {
     }
 
     pub fn clear(&mut self) {
-       self.count = 0;
-       self.head = 0;
-       self.tail = 0;
+        self.count = 0;
+        self.head = 0;
+        self.tail = 0;
     }
 
     pub fn drain(&mut self) -> Vec<T> {
         let values = self.collect::<Vec<_>>();
         self.clear();
-        values 
+        values
     }
 }
 
@@ -90,8 +88,8 @@ impl<T> Iterator for BadRingBuffer<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.empty() { 
-            return None
+        if self.empty() {
+            return None;
         }
 
         let p = unsafe { self.start_ptr.offset(self.tail as isize).read() };
@@ -107,16 +105,14 @@ impl<T> Iterator for BadRingBuffer<T> {
 }
 
 // -----------------------------------------------------------------------------
-//    - Read imp - 
+//    - Read imp -
 // -----------------------------------------------------------------------------
 impl Read for BadRingBuffer<u8> {
-    
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut index = 0;
         let buf_len = buf.len();
         while let Some(value) = self.next() {
-            buf[index] = value
-            ;
+            buf[index] = value;
             index += 1;
             if index == buf_len {
                 break;
@@ -130,9 +126,7 @@ impl Read for BadRingBuffer<u8> {
 //     - Write impl -
 // -----------------------------------------------------------------------------
 impl Write for BadRingBuffer<u8> {
-
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        
         buf.iter().for_each(|v| self.push(*v));
 
         Ok(buf.len())
@@ -141,6 +135,19 @@ impl Write for BadRingBuffer<u8> {
     fn flush(&mut self) -> Result<()> {
         self.clear();
         Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
+//     - Drop impl -
+// -----------------------------------------------------------------------------
+impl<T> Drop for BadRingBuffer<T> {
+    fn drop(&mut self) {
+        unsafe {
+            let layout = Layout::from_size_align(self.capacity * size_of::<T>(), align_of::<T>())
+                .expect("could not create layout");
+            dealloc(self.start_ptr.cast::<u8>(), layout);
+        }
     }
 }
 
@@ -207,7 +214,7 @@ mod test {
 
         let read_bytes = rb.read(&mut buf).unwrap();
 
-        assert_eq!(&buf[0..read_bytes], &[1,2,3,4])
+        assert_eq!(&buf[0..read_bytes], &[1, 2, 3, 4])
     }
 
     #[test]
@@ -218,7 +225,7 @@ mod test {
         rb.push(3);
 
         let values = rb.drain();
-        assert_eq!(values, &[1,2,3]);
+        assert_eq!(values, &[1, 2, 3]);
         assert!(rb.empty());
     }
 
@@ -229,7 +236,7 @@ mod test {
 
         let bytes_written = rb.write(&buf).unwrap();
         assert_eq!(4, bytes_written);
-        assert_eq!(rb.drain(), vec![1,2,3,4]);
+        assert_eq!(rb.drain(), vec![1, 2, 3, 4]);
     }
 
     #[test]
